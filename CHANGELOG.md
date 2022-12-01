@@ -1,3 +1,89 @@
+# Release 0.27.0
+
+## What's New
+
+* Ziti CLI
+    * The CLI has been cleaned up and unused, unusable and underused components have been removed or hidden
+    * Add create/delete transit-router CLI commands
+    * [Issue-706](https://github.com/openziti/ziti/issues/706) - Add port check to quickstart
+
+## Ziti CLI
+
+* The update command has been removed. It was non-functional, so this should not affect anyone 
+* The adhoc, ping and playbook commands have been removed. These were ansible and vagrant commands that were not widely used.
+* Make the art command hidden, doesn't need to be removed, leave it as an easter egg
+* Move ziti ps command under ziti agent. Remove all ziti ps subcommands, as they already exist as ziti agent subcommands
+* Add `ziti controller` and `ziti router` commands
+    * They should work exactly the same as `ziti-controller` and `ziti router` 
+    * The standalone binaries for `ziti-controller` and `ziti-router` are deprecated and will be removed in a future release
+* Add hidden `ziti tunnel` command
+    * Should work exactly the same as `ziti-tunnel`
+    * Is hidden as `ziti-edge-tunnel` is the preferred tunnelling application
+    * The standalone binary `ziti-tunnel` is deprecated and will be removed in a future release
+* The db, log-format and unwrap commands have been moved under a new ops command
+* ziti executable download management has been deprecated
+    * The init and uninstall commands have been removed
+    * The install, upgrade, use and version commands have been hidden and will be hidden once tests using them are updated or replaced
+* The demo and tutorial commands have been moved under the new learn subcommand
+* `ziti edge enroll` now has a verbose option for additional debugging
+* The `ziti edge` CLI now support create/delete transit-router. This allows transit/fabric routers to be provisioned using an enrollment process, rather than requiring certs to be created externally. Note that this requires that the fabric router config file has a `csr` section.
+
+# Release 0.26.11
+
+## What's New
+
+This is mainly a bugfix release.
+
+- Ziti CLI
+  - Bug Fixes (See Component Updates and Bug Fixes below)
+  - Added CLI flags for setting router tunneler capability
+
+## Ziti CLI
+
+### Added CLI flags for setting router tunneler capability
+Ziti CLI `ziti create config router edge` now has two new flags; `--tunnelerMode` and `--lanInterface`
+#### --tunnelerMode
+The `--tunnelerMode` flag enables tunneling and sets the tunneler mode. Currently, there are `none`, `host` and `tproxy`
+modes. The default tunneler mode is `host` mode, choosing `none` will disable tunnel capabilities for the router.
+
+Examples:
+```shell
+ziti create config router edge --routerName myRouter --tunnelerMode tproxy
+
+ziti create config router edge --routerName myRouter --tunnelerMode none
+```
+#### --lanInterface
+If using the `tproxy` tunneler mode, there is an optional `lanIf` section in the config to identify an interface to use.
+
+Example:
+```shell
+ziti create config router edge --routerName myRouter --tunnelerMode tproxy --lanInterface tun0
+```
+
+## Component Updates and Bug Fixes
+
+* github.com/openziti/agent: [v1.0.4 -> v1.0.5](https://github.com/openziti/agent/compare/v1.0.4...v1.0.5)
+* github.com/openziti/channel/v2: [v2.0.9 -> v2.0.12](https://github.com/openziti/channel/compare/v2.0.9...v2.0.12)
+* github.com/openziti/edge: [v0.24.12 -> v0.24.36](https://github.com/openziti/edge/compare/v0.24.12...v0.24.36)
+    * [Issue #1217](https://github.com/openziti/edge/issues/1217) - Ziti Edge lists the edge router to be offline after recovering from an internet fluctuation
+
+* github.com/openziti/fabric: [v0.21.9 -> v0.21.17](https://github.com/openziti/fabric/compare/v0.21.9...v0.21.17)
+* github.com/openziti/foundation/v2: [v2.0.6 -> v2.0.7](https://github.com/openziti/foundation/compare/v2.0.6...v2.0.7)
+* github.com/openziti/identity: [v1.0.18 -> v1.0.20](https://github.com/openziti/identity/compare/v1.0.18...v1.0.20)
+* github.com/openziti/runzmd: v1.0.3 (new)
+* github.com/openziti/sdk-golang: [v0.16.135 -> v0.16.146](https://github.com/openziti/sdk-golang/compare/v0.16.135...v0.16.146)
+    * [Issue #328](https://github.com/openziti/sdk-golang/issues/328) - enrollment has no 'verbose' option for debugging
+    * [Issue #314](https://github.com/openziti/sdk-golang/issues/314) - Incorrect documentation for grpc-example
+    * [Issue #317](https://github.com/openziti/sdk-golang/issues/317) - No documenation for call example
+    * [Issue #311](https://github.com/openziti/sdk-golang/issues/311) - Chat Client and Server needs documentation
+
+* github.com/openziti/storage: [v0.1.25 -> v0.1.26](https://github.com/openziti/storage/compare/v0.1.25...v0.1.26)
+* github.com/openziti/transport/v2: [v2.0.36 -> v2.0.38](https://github.com/openziti/transport/compare/v2.0.36...v2.0.38)
+* github.com/openziti/metrics: [v1.1.4 -> v1.1.5](https://github.com/openziti/metrics/compare/v1.1.4...v1.1.5)
+* github.com/openziti/ziti: [v0.26.10 -> v0.26.11](https://github.com/openziti/ziti/compare/v0.26.10...v0.26.11)
+    * [Issue 868](https://github.com/openziti/ziti/issues/868): `ZITI_EDGE_ROUTER_IP_OVERRIDE` does not override the edge router advertise hostname
+    * [Issue 882](https://github.com/openziti/ziti/issues/882): `ZITI_EDGE_ROUTER_RAWNAME` not stored in quickstart .env file
+
 # Release 0.26.10
 
 ## What's New

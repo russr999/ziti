@@ -279,6 +279,37 @@ function checkPrereqs {
   fi
 }
 
+function _portCheck {
+  if [[ "${1-}" == "" ]] || [[ "${2-}" == "" ]]; then
+    echo -e "_portCheck Usage: _portCheck <port> <portName>"
+    return 0
+  fi
+
+  envVar="${1-}"
+  if [[ -n "$ZSH_VERSION" ]]; then
+    envVarValue="${(P)envVar}"
+  elif [[ -n "$BASH_VERSION" ]]; then
+    envVarValue="${!envVar}"
+  else
+    echo -e "$(YELLOW "Unknown/Unsupported shell, cannot verify availability of ${2-}'s intended port, proceed with caution")"
+    return 0
+  fi
+
+  echo -e "Checking if ${2-}'s port (${envVarValue}) is available"
+  portCheckResult=$(lsof -w -i :"${envVarValue}" 2> /dev/null)
+  if [[ "${portCheckResult}" != "" ]]; then # Controller management plane
+      echo -e "$(RED " ")"
+      echo -e "$(RED "The intended ${2-} port (${envVarValue}) is currently being used, the process using this port should be closed or the port value should be changed.")"
+      echo -e "$(RED "To use a different port, set the port value in ${envVar}")"
+      echo -e "$(RED " ")"
+      echo -e "$(RED "Example:")"
+      echo -e "$(RED "export ${envVar}=1234")"
+      echo -e "$(RED " ")"
+      return 1
+  fi
+  return 0
+}
+
 function checkControllerName {
   if [[ "${ZITI_EDGE_CONTROLLER_HOSTNAME}" == *['!'@#\$%^\&*\(\)_+]* ]]; then
     echo -e "$(RED "  - The provided Network name contains an invalid character: '!'@#\$%^\&*()_+")"
@@ -359,6 +390,7 @@ function generateEnvFile {
   if [[ "${ZITI_CONTROLLER_RAWNAME-}" == "" ]]; then export ZITI_CONTROLLER_RAWNAME="${ZITI_NETWORK-}"; fi
   if [[ "${ZITI_CONTROLLER_HOSTNAME-}" == "" ]]; then export export ZITI_CONTROLLER_HOSTNAME="${ZITI_CONTROLLER_RAWNAME}"; fi
   if [[ "${ZITI_CTRL_PORT-}" == "" ]]; then export ZITI_CTRL_PORT="6262"; fi
+  if [[ "${ZITI_EDGE_ROUTER_PORT-}" == "" ]]; then export ZITI_EDGE_ROUTER_PORT="3022"; fi
 
   if [[ "${ZITI_EDGE_CONTROLLER_RAWNAME-}" == "" ]]; then export export ZITI_EDGE_CONTROLLER_RAWNAME="${ZITI_NETWORK-}"; fi
   if [[ "${ZITI_EDGE_CONTROLLER_HOSTNAME-}" == "" ]]; then export export ZITI_EDGE_CONTROLLER_HOSTNAME="${ZITI_EDGE_CONTROLLER_RAWNAME}"; fi
@@ -445,6 +477,7 @@ function ziti_expressConfiguration {
   if [[ "${ZITI_ZAC_HOSTNAME-}" != "" ]]; then echo "ZITI_ZAC_HOSTNAME OVERRIDDEN: $ZITI_ZAC_HOSTNAME"; fi
   if [[ "${ZITI_EDGE_ROUTER_HOSTNAME-}" != "" ]]; then echo "ZITI_EDGE_ROUTER_HOSTNAME OVERRIDDEN: $ZITI_EDGE_ROUTER_HOSTNAME"; fi
   if [[ "${ZITI_EDGE_ROUTER_PORT-}" != "" ]]; then echo "ZITI_EDGE_ROUTER_PORT OVERRIDDEN: $ZITI_EDGE_ROUTER_PORT"; fi
+  if [[ "${ZITI_EDGE_ROUTER_RAWNAME-}" != "" ]]; then echo "ZITI_EDGE_ROUTER_RAWNAME OVERRIDDEN: $ZITI_EDGE_ROUTER_RAWNAME"; fi
 
   echo " "
   echo " "
@@ -467,6 +500,24 @@ function ziti_expressConfiguration {
     echo "Exiting as env file was not generated"
     return 1
   fi
+
+  # Check Ports
+  returnCnt=0
+  _portCheck "ZITI_CTRL_PORT" "Controller"
+  returnCnt=$((returnCnt + $?))
+  _portCheck "ZITI_EDGE_ROUTER_PORT" "Edge Router"
+  returnCnt=$((returnCnt + $?))
+  _portCheck "ZITI_EDGE_CONTROLLER_PORT" "Edge Controller"
+  returnCnt=$((returnCnt + $?))
+  _portCheck "ZITI_CTRL_MGMT_PORT" "Controller Management Plane"
+  returnCnt=$((returnCnt + $?))
+  if [[ "${ZITI_EDGE_ROUTER_LISTENER_BIND_PORT-}" != "" ]]; then
+    # This port can be explicitly set but is not always, only check if set
+    _portCheck "ZITI_EDGE_ROUTER_LISTENER_BIND_PORT" "Router Listener Bind Port"
+    returnCnt=$((returnCnt + $?))
+  fi
+  if [[ "returnCnt" -gt "0" ]]; then return 1; fi
+
   #checkHostsFile
 
   echo " "
@@ -495,14 +546,9 @@ function ziti_expressConfiguration {
   "${ZITI_BIN_DIR-}/ziti" edge create edge-router-policy allEdgeRouters --edge-router-roles '#public' --identity-roles '#all' > /dev/null
 
   echo -e "----------  Creating a service edge router policy allowing all services to use $(GREEN "#public") edge routers"
-  "${ZITI_BIN_DIR-}/ziti" edge delete service-edge-router-policy allSvcPublicRouters > /dev/null
-  "${ZITI_BIN_DIR-}/ziti" edge create service-edge-router-policy allSvcPublicRouters --edge-router-roles '#public' --service-roles '#all' > /dev/null
+  "${ZITI_BIN_DIR-}/ziti" edge delete service-edge-router-policy allSvcAllRouters > /dev/null
+  "${ZITI_BIN_DIR-}/ziti" edge create service-edge-router-policy allSvcAllRouters --edge-router-roles '#all' --service-roles '#all' > /dev/null
 
-  if [[ "${ZITI_EDGE_ROUTER_RAWNAME-}" != "" ]]; then
-    echo "ZITI_EDGE_ROUTER_RAWNAME OVERRIDDEN: $ZITI_EDGE_ROUTER_RAWNAME"
-  else
-    ZITI_EDGE_ROUTER_RAWNAME="${ZITI_NETWORK}-edge-router"
-  fi
   echo "USING ZITI_EDGE_ROUTER_RAWNAME: $ZITI_EDGE_ROUTER_RAWNAME"
 
   createRouterPki "${ZITI_EDGE_ROUTER_RAWNAME}"
@@ -1043,7 +1089,8 @@ function ziti_createEnvFile {
 
   export ZITI_BIN_ROOT="${ZITI_HOME}/ziti-bin"
 
-  if [[ "${ZITI_CTRL_MGMT_HOST_PORT-}" == "" ]]; then export ZITI_CTRL_MGMT_HOST_PORT="${ZITI_CONTROLLER_HOSTNAME}:10000"; fi
+  if [[ "${ZITI_CTRL_MGMT_PORT-}" == "" ]]; then export ZITI_CTRL_MGMT_PORT="10000"; fi
+  if [[ "${ZITI_CTRL_MGMT_HOST_PORT-}" == "" ]]; then export ZITI_CTRL_MGMT_HOST_PORT="${ZITI_CONTROLLER_HOSTNAME}:${ZITI_CTRL_MGMT_PORT}"; fi
   if [[ "${ZITI_CTRL_IDENTITY_CERT-}" == "" ]]; then export ZITI_CTRL_IDENTITY_CERT="${ZITI_PKI_OS_SPECIFIC}/${ZITI_CONTROLLER_INTERMEDIATE_NAME}/certs/${ZITI_CONTROLLER_HOSTNAME}-client.cert"; fi
   if [[ "${ZITI_CTRL_IDENTITY_SERVER_CERT-}" == "" ]]; then export ZITI_CTRL_IDENTITY_SERVER_CERT="${ZITI_PKI_OS_SPECIFIC}/${ZITI_CONTROLLER_INTERMEDIATE_NAME}/certs/${ZITI_CONTROLLER_HOSTNAME}-server.chain.pem"; fi
   if [[ "${ZITI_CTRL_IDENTITY_KEY-}" == "" ]]; then export ZITI_CTRL_IDENTITY_KEY="${ZITI_PKI_OS_SPECIFIC}/${ZITI_CONTROLLER_INTERMEDIATE_NAME}/keys/${ZITI_CONTROLLER_HOSTNAME}-server.key"; fi
@@ -1056,6 +1103,8 @@ function ziti_createEnvFile {
 
   if [[ "${ZITI_SIGNING_CERT}" == "" ]]; then export export ZITI_SIGNING_CERT="${ZITI_PKI_OS_SPECIFIC}/${ZITI_SIGNING_INTERMEDIATE_NAME}/certs/${ZITI_SIGNING_INTERMEDIATE_NAME}.cert"; fi
   if [[ "${ZITI_SIGNING_KEY}" == "" ]]; then export export ZITI_SIGNING_KEY="${ZITI_PKI_OS_SPECIFIC}/${ZITI_SIGNING_INTERMEDIATE_NAME}/keys/${ZITI_SIGNING_INTERMEDIATE_NAME}.key"; fi
+
+  if [[ "${ZITI_EDGE_ROUTER_RAWNAME-}" == "" ]]; then ZITI_EDGE_ROUTER_RAWNAME="${ZITI_NETWORK}-edge-router"; fi
 
   mkdir -p "${ZITI_BIN_ROOT}"
   mkdir -p "${ZITI_HOME}/db"
